@@ -1,4 +1,5 @@
 #include "darknet.h"
+#include <dirent.h> 
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
@@ -558,8 +559,68 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
     }
 }
 
+int check_filename_ext(const char *filename) {
+	int len = strlen(filename);
+	if ((len >= 4) && strcmp((&filename[len - 4]), ".png") == 0){
+	    return 1;
+	}
+	else{
+	    return 0;
+	}
+}
 
-void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
+char * prepend(const char * str, const char* pre)
+{
+    char * new_string = malloc(strlen(str)+strlen(pre)+1);  // add 2 to make room for the character we will prepend and the null termination character at the end
+    strcpy(new_string, pre);
+    strcat(new_string, str);
+    return new_string;
+}
+
+int write_detection_file(image im, char *filename, detection *dets, int num, float thresh, char **names, image **alphabet, int classes){
+    int i,j;
+    for (i=0; i<num; ++i){
+        char labelstr[4096]={0};
+        int class = -1;
+        for(j=0; j<classes; ++j){
+            if(dets[i].prob[j]>thresh){
+                if(class<0){
+                    strcat(labelstr, names[j]);
+                    class=j;
+                }
+                else{
+                    strcat(labelstr, ", ");
+                    strcat(labelstr, names[j]);
+                }
+                printf("%s:\n", filename);
+                printf("%s: %.0f%%\n", names[j], dets[i].prob[j]*100);
+            }
+        }
+   
+        if(class>=0){
+            int width= im.h*.006;
+            box b = dets[i].bbox;
+            int left  = (b.x-b.w/2.)*im.w;
+            int right = (b.x+b.w/2.)*im.w;
+            int top   = (b.y-b.h/2.)*im.h;
+            int bot = (b.y+b.h/2.)*im.h;
+            if(left < 0) left = 0;
+            if(right > im.w-1) right = im.w-1;
+            if(top < 0) top = 0;
+            if(bot > im.h-1) bot = im.h-1;
+            if (alphabet) {
+                image label = get_label(alphabet, labelstr, (im.h*.03));
+            }
+            print("left:%d\ttop:%d\tright:%d\tbottom:%d\twidth:%d\n", left, top, right, bot, width);
+        }
+        
+   }
+    
+    return 1;
+}
+
+
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *dirName, float thresh, float hier_thresh, char *outfile, int fullscreen)
 {
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
@@ -573,16 +634,64 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char buff[256];
     char *input = buff;
     float nms=.45;
-    while(1){
-        if(filename){
-            strncpy(input, filename, 256);
-        } else {
-            printf("Enter Image Path: ");
-            fflush(stdout);
-            input = fgets(input, 256, stdin);
-            if(!input) return;
-            strtok(input, "\n");
-        }
+
+    DIR *d;
+    struct dirent *dir;
+    d = opendir("data");
+    if (d){
+	   printf("inside if of d\n");
+           while ((dir = readdir(d)) != NULL) {
+		printf("inside while loop for reading files from dir\n");
+		if(check_filename_ext(dir->d_name)){
+			printf("checking file extension\n");
+			char *filename =prepend(dir->d_name, "data/") ;
+			char *outfile =prepend(dir->d_name, "tempResults/") ;
+			printf("%s\n", filename);
+			printf("%s\n", outfile);
+			strncpy(input, filename, 256);
+			image im = load_image_color(input,0,0);
+       			 image sized = letterbox_image(im, net->w, net->h);
+			layer l = net->layers[net->n-1];
+			float *X = sized.data;
+			time=what_time_is_it_now();
+			network_predict(net, X);
+			printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
+			int nboxes = 0;
+			detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+			//printf("%d\n", nboxes);
+			//if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
+			if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+			//draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
+	                int a = write_detection_file(im,filename, dets, nboxes, thresh, names, alphabet, l.classes);
+			free_detections(dets, nboxes);
+			if(outfile){
+			    save_image(im, outfile);
+			}
+			else{
+			    save_image(im, "predictions");
+		#ifdef OPENCV
+			    make_window("predictions", 512, 512, 0);
+			    show_image(im, "predictions", 0);
+		#endif
+			}
+
+			free_image(im);
+			free_image(sized);
+			//if (filename) break;
+
+		}
+	  }
+    	 closedir(d);
+     }
+ /*   while(1){
+ //           strncpy(input, filename, 256);
+ //       } else {
+ //           printf("Enter Image Path: ");
+ //           fflush(stdout);
+ //           input = fgets(input, 256, stdin);
+ //           if(!input) return;
+//           strtok(input, "\n");
+ //       }
         image im = load_image_color(input,0,0);
         image sized = letterbox_image(im, net->w, net->h);
         //image sized = resize_image(im, net->w, net->h);
@@ -617,7 +726,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         free_image(im);
         free_image(sized);
         if (filename) break;
-    }
+    }*/
+
 }
 
 /*

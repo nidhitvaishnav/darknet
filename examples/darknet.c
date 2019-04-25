@@ -1,5 +1,5 @@
 #include "darknet.h"
-
+#include <dirent.h> 
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -397,6 +397,24 @@ void visualize(char *cfgfile, char *weightfile)
     visualize_network(net);
 }
 
+/*int check_filename_ext(const char *filename) {
+	int len = strlen(filename);
+	if ((len >= 4) && strcmp((&filename[len - 4]), ".png") == 0){
+	    return 1;
+	}
+	else{
+	    return 0;
+	}
+}
+
+char * prepend(const char * str, const char* pre)
+{
+    char * new_string = malloc(strlen(str)+strlen(pre)+1);  // add 2 to make room for the character we will prepend and the null termination character at the end
+    strcpy(new_string, pre);
+    strcat(new_string, str);
+    return new_string;
+}*/
+
 int main(int argc, char **argv)
 {
     //test_resize("data/bad.jpg");
@@ -430,11 +448,37 @@ int main(int argc, char **argv)
     } else if (0 == strcmp(argv[1], "detector")){
         run_detector(argc, argv);
     } else if (0 == strcmp(argv[1], "detect")){
+        
         float thresh = find_float_arg(argc, argv, "-thresh", .5);
         char *filename = (argc > 4) ? argv[4]: 0;
         char *outfile = find_char_arg(argc, argv, "-out", 0);
         int fullscreen = find_arg(argc, argv, "-fullscreen");
         test_detector("cfg/coco.data", argv[2], argv[3], filename, thresh, .5, outfile, fullscreen);
+	
+/*        float thresh = find_float_arg(argc, argv, "-thresh", .5);
+        char *file_Name;
+	DIR *d;
+	struct dirent *dir;
+  	d = opendir("data");
+	if (d) {
+            while ((dir = readdir(d)) != NULL) {
+                if(check_filename_ext(dir->d_name)){
+		   file_Name =prepend(dir->d_name, "data/") ;
+	//              if ( !strcmp( file_Name, "data/."   )) continue;
+	//              if ( !strcmp( file_Name, "data/.."  )) continue;
+                   char *outfile =prepend(dir->d_name, "results/") ;
+                   printf("%s\n", file_Name);
+
+		      //printf("%f\n", thresh);
+                   int fullscreen = find_arg(argc, argv, "-fullscreen");
+                   printf("%s\n", outfile);
+                   test_detector("cfg/coco.data", argv[2], argv[3], file_Name, thresh, .5, outfile, fullscreen);
+                   printf("after test detector");
+                }
+            }
+	    closedir(d);
+	  }*/
+	
     } else if (0 == strcmp(argv[1], "cifar")){
         run_cifar(argc, argv);
     } else if (0 == strcmp(argv[1], "go")){
